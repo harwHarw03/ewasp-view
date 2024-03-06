@@ -4,19 +4,58 @@ let dataMap = {};
 
 const webcamElement = document.getElementById("webcam");
 const cameraSelect = document.getElementById("camera-select");
+
 const armingToggle = document.getElementById("arming-toggle");
+const armingStatusElement = document.getElementById("arming-status");
+
+let isArmed = false;
+
+function toggleArming() {
+    isArmed = !isArmed; // Toggle the arming state
+    armingStatusElement.textContent = isArmed ? "Armed" : "Disarmed";
+    updateTable();
+}
+
+armingToggle.addEventListener("click", toggleArming);
+
+evtSource.onmessage = function (event) {
+    const data = JSON.parse(event.data);
+    Object.assign(dataMap, data);
+
+    if (data.arming !== undefined) {
+        isArmed = data.arming;
+        armingStatusElement.textContent = isArmed ? "Armed" : "Disarmed";
+        // Update the table with the arming status
+        updateTable();
+    }
+
+    updateTable();
+};
+
+function updateTable() {
+    sensorDataElement.innerHTML = "";
+
+    for (const key in dataMap) {
+        if (dataMap.hasOwnProperty(key)) {
+            const newRow = `<tr><td>${key}</td><td>${dataMap[key]}</td></tr>`;
+            sensorDataElement.innerHTML += newRow;
+        }
+    }
+    const armingRow = `<tr><td>Arming Status</td><td>${isArmed ? "Armed" : "Disarmed"}</td></tr>`;
+    sensorDataElement.innerHTML += armingRow;
+}
 
 async function switchCamera(deviceId) {
     try {
         if (typeof webcamElement.srcObject !== 'undefined') {
-            webcamElement.srcObject = null; 
+            webcamElement.srcObject = null;
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { deviceId: { exact: deviceId } }
         });
 
-        webcamElement.srcObject = stream; 
+        webcamElement.srcObject = stream;
     } catch (error) {
         console.error('Error accessing webcam:', error);
     }
@@ -45,10 +84,10 @@ cameraSelect.addEventListener('change', event => {
 
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     navigator.mediaDevices.getUserMedia({ video: true })
-        .then(function(stream) {
+        .then(function (stream) {
             webcamElement.srcObject = stream;
         })
-        .catch(function(error) {
+        .catch(function (error) {
             console.error('Error accessing webcam:', error);
         });
 
@@ -59,19 +98,19 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
 
 armingToggle.addEventListener('change', event => {
     const isArmed = event.target.checked;
-    // You can handle arming state change here, for example, publish to MQTT
+    publishArmingStatus(isArmed);
 });
 
-evtSource.onmessage = function (event) {
-    const data = JSON.parse(event.data);
-    Object.assign(dataMap, data);
+function publishArmingStatus(isArmed) {
+    const message = JSON.stringify({ arming: isArmed });
+    
+    console.log('Publishing arming status:', message);
 
-    sensorDataElement.innerHTML = "";
-
-    for (const key in dataMap) {
-        if (dataMap.hasOwnProperty(key)) {
-            const newRow = `<tr><td>${key}</td><td>${dataMap[key]}</td></tr>`;
-            sensorDataElement.innerHTML += newRow;
+    client.publish('/ewasp/gcs', message, (err) => {
+        if (err) {
+            console.error('Error publishing arming status:', err);
+        } else {
+            console.log('Published arming status:', message);
         }
-    }
-};
+    });
+}
